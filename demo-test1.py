@@ -23,6 +23,10 @@ script.add_track(draft.TrackType.text, "侧边文字轨道")
 video_material = draft.VideoMaterial(video_path)
 video_duration = video_material.duration
 
+# 转场时间配置参数
+FIRST_TRANSITION_TIME = 2  # 第一次转场的时间（秒）
+TRANSITION_INTERVAL = 10   # 后续转场间隔时间（秒）
+
 # 定义转场效果列表（效果明显的转场）
 dramatic_transitions = [
     draft.TransitionType.信号故障,
@@ -217,17 +221,51 @@ dramatic_transitions = [
 # 创建视频片段列表
 video_segments = []
 
-# 计算分段点：0秒、1秒、11秒、21秒、31秒...直到视频结束
+# 计算分段点：0秒、FIRST_TRANSITION_TIME秒、(FIRST_TRANSITION_TIME+TRANSITION_INTERVAL)秒...直到视频结束
 segment_points = [0]  # 从0秒开始
-segment_points.append(tim("1s"))  # 第一个转场在1秒处
-current_time = tim("11s")         # 从11秒开始每10秒一个转场
+segment_points.append(tim(f"{FIRST_TRANSITION_TIME}s"))  # 第一个转场时间
+current_time = tim(f"{FIRST_TRANSITION_TIME + TRANSITION_INTERVAL}s")  # 从第一个转场后开始每TRANSITION_INTERVAL秒一个转场
 
 while current_time < video_duration:
     segment_points.append(current_time)
-    current_time += tim("10s")
+    current_time += tim(f"{TRANSITION_INTERVAL}s")
 
 # 添加视频结束点
 segment_points.append(video_duration)
+
+# 定义特别明显的转场效果（用于1秒处的开场转场）
+opening_transitions = [
+    draft.TransitionType.信号故障,
+    draft.TransitionType.万花筒,
+    draft.TransitionType.爆闪,
+    draft.TransitionType.爆闪_II,
+    draft.TransitionType.闪光灯,
+    draft.TransitionType.闪光灯_II,
+    draft.TransitionType.闪光灯_III,
+    draft.TransitionType.霓虹闪光,
+    draft.TransitionType.霓虹闪光_II,
+    draft.TransitionType.白光快闪,
+    draft.TransitionType.荧光爆闪,
+    draft.TransitionType.炫光,
+    draft.TransitionType.炫光_II,
+    draft.TransitionType.炫光_III,
+    draft.TransitionType.电光,
+    draft.TransitionType.电光_II,
+    draft.TransitionType.炸弹,
+    draft.TransitionType.烟雾弹,
+    draft.TransitionType.爆米花,
+    draft.TransitionType.爱心冲击,
+    draft.TransitionType.玻璃破碎,
+    draft.TransitionType.玻璃破碎_II,
+    draft.TransitionType.震动,
+    draft.TransitionType.震动_II,
+    draft.TransitionType.震动缩小,
+    draft.TransitionType.抖动,
+    draft.TransitionType.抖动_II,
+    draft.TransitionType.频闪,
+    draft.TransitionType.闪屏故障,
+    draft.TransitionType.闪黑_II,
+]
 
 # 创建视频片段（每个片段在轨道上连续排列，但截取素材的不同部分）
 for i in range(len(segment_points) - 1):
@@ -236,7 +274,11 @@ for i in range(len(segment_points) - 1):
     duration = end_time - start_time
     
     # 计算轨道上的位置（每个片段紧挨着前一个片段）
-    track_start = i * tim("10s") if i > 0 else 0  # 第一个片段从0开始，后续片段每10秒一个
+    if i == 0:
+        track_start = 0  # 第一个片段从0开始
+    else:
+        # 后续片段紧挨着前一个片段
+        track_start = video_segments[i-1].end
     
     # 创建视频片段，在轨道上连续排列，但截取素材的不同部分
     segment = draft.VideoSegment(
@@ -245,13 +287,17 @@ for i in range(len(segment_points) - 1):
         source_timerange=trange(start_time, duration)  # 素材的截取范围
     )
     
-    # 为每个片段添加随机转场效果（除了第一个片段）
-    if i > 0:  # 不是第一个片段
+    # 为每个片段添加转场效果
+    if i == 0:  # 第一个片段（0-FIRST_TRANSITION_TIME秒），不添加转场（因为没有前一个片段）
+        print(f"片段 {i}: 轨道{track_start/1000000:.1f}s-{(track_start+duration)/1000000:.1f}s, 素材{start_time/1000000:.1f}s-{end_time/1000000:.1f}s, 无转场")
+    elif i == 1:  # 第二个片段（FIRST_TRANSITION_TIME-(FIRST_TRANSITION_TIME+TRANSITION_INTERVAL)秒），添加开场转场到前一个片段
+        opening_transition = random.choice(opening_transitions)
+        segment.add_transition(opening_transition, duration=tim("0.5s"))  # 开场转场时间稍短
+        print(f"片段 {i}: 轨道{track_start/1000000:.1f}s-{(track_start+duration)/1000000:.1f}s, 素材{start_time/1000000:.1f}s-{end_time/1000000:.1f}s, 开场转场: {opening_transition.name}")
+    else:  # 后续片段，使用普通转场
         random_transition = random.choice(dramatic_transitions)
         segment.add_transition(random_transition, duration=tim("0.8s"))
         print(f"片段 {i}: 轨道{track_start/1000000:.1f}s-{(track_start+duration)/1000000:.1f}s, 素材{start_time/1000000:.1f}s-{end_time/1000000:.1f}s, 转场: {random_transition.name}")
-    else:
-        print(f"片段 {i}: 轨道{track_start/1000000:.1f}s-{(track_start+duration)/1000000:.1f}s, 素材{start_time/1000000:.1f}s-{end_time/1000000:.1f}s, 无转场")
     
     video_segments.append(segment)
 
@@ -302,4 +348,4 @@ print(f"共创建了 {len(video_segments)} 个视频片段")
 print("主标题: 深情诱惑 第1集 (红色，屏幕下方)")
 print("侧边文字: 点我查看更多免费短剧 (黄色，右侧竖排)")
 print("分辨率: 1080x1920 (手机屏幕尺寸)")
-print("转场效果: 开场1秒处 + 每10秒一个随机转场")
+print(f"转场效果: 开场{FIRST_TRANSITION_TIME}秒处 + 每{TRANSITION_INTERVAL}秒一个随机转场")
